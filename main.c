@@ -22,7 +22,6 @@ int command_exists(const char *cmd) {
     char *dir;
     char fullpath[512];
     int found = 0;
-
     env_path = getenv("PATH");
     if (!env_path)
         return 0;
@@ -58,7 +57,7 @@ void get_line_val(const char *path, const char *key, char *out, size_t len) {
         if (strncmp(line, key, strlen(key)) == 0) {
             val = strchr(line, '=');
             if (val) {
-                val++; 
+                val++;
                 val[strcspn(val, "\n")] = 0;
                 if (*val == '"')
                     val++;
@@ -108,7 +107,6 @@ void get_uptime() {
     int years, months, days, hours, minutes;
     char out[256];
     int first = 1;
-    
     f = fopen("/proc/uptime", "r");
     if (f) {
         if (fscanf(f, "%lf", &uptime_seconds) == 1) {
@@ -122,7 +120,6 @@ void get_uptime() {
             hours   = seconds / 3600;
             seconds %= 3600;
             minutes = seconds / 60;
-            
             out[0] = '\0';
             if (years > 0) {
                 sprintf(out + strlen(out), "%d year%s", years, years == 1 ? "" : "s");
@@ -162,26 +159,24 @@ void get_uptime() {
 }
 
 void get_shell() {
-    char *shell;
-    const char *base;
-    char cmd[256];
-    char version[128];
-    char out[256];
-    FILE *f;
-    
-    shell = getenv("SHELL");
+    char *shell = getenv("SHELL");
     if (!shell)
         return;
-    base = strrchr(shell, '/');
-    if (base)
-        base++;
-    else
-        base = shell;
-    sprintf(cmd, "%s --version 2>/dev/null | head -n1 | awk '{print $2}'", shell);
+    const char *base = strrchr(shell, '/');
+    base = base ? base + 1 : shell;
+    char cmd[128], version[128], out[256];
+    FILE *f;
+    sprintf(cmd, "%s --version 2>/dev/null", shell);
     f = popen(cmd, "r");
     if (f && fgets(version, sizeof(version), f)) {
         version[strcspn(version, "\n")] = 0;
-        sprintf(out, "%s %s", base, version);
+        char *v = strstr(version, base);
+        if (v)
+            v += strlen(base);
+        else
+            v = version;
+        while (*v == ' ' || *v == ',' || *v == '-') v++;
+        sprintf(out, "%s %s", base, v);
         print("Shell:", out);
         pclose(f);
     } else {
@@ -193,7 +188,6 @@ void get_cpu() {
     FILE *f;
     char line[256];
     char *v;
-    
     f = fopen("/proc/cpuinfo", "r");
     if (!f)
         return;
@@ -214,7 +208,6 @@ void get_cpu() {
 void get_gpu() {
     FILE *f;
     char buf[256];
-    
     f = popen("lspci 2>/dev/null | grep -i 'vga' | sed 's/.*: //'", "r");
     if (f && fgets(buf, sizeof(buf), f)) {
         buf[strcspn(buf, "\n")] = 0;
@@ -226,15 +219,12 @@ void get_gpu() {
 }
 
 void get_memory() {
-    FILE *f;
-    char label[32];
-    char discard;
-    long val;
-    long total = -1, avail = -1;
+    FILE *f = fopen("/proc/meminfo", "r");
+    char label[32], discard;
+    long val, total = -1, avail = -1;
     char memStr[64];
     double used, total_mib;
-    
-    f = fopen("/proc/meminfo", "r");
+    int percent;
     if (!f)
         return;
     while (fscanf(f, "%31s %ld %c", label, &val, &discard) == 3) {
@@ -247,19 +237,18 @@ void get_memory() {
         fgets(label, sizeof(label), f);
     }
     fclose(f);
-    if (total != -1 && avail != -1) {
-        used = (total - avail) / 1024.0;
-        total_mib = total / 1024.0;
-        sprintf(memStr, "%.0f MiB / %.0f MiB", used, total_mib);
+    if (total > 0 && avail >= 0) {
+        used = (double)(total - avail) / 1024.0;
+        total_mib = (double)total / 1024.0;
+        percent = (int)((used * 100.0) / total_mib);
+        sprintf(memStr, "%.0f MiB / %.0f MiB (%d%%)", used, total_mib, percent);
         print("Memory:", memStr);
     }
 }
 
 void get_resolution() {
-    FILE *f;
+    FILE *f = popen("xrandr 2>/dev/null | grep '*' | awk '{print $1}'", "r");
     char buf[32];
-    
-    f = popen("xrandr 2>/dev/null | grep '*' | awk '{print $1}'", "r");
     if (f && fgets(buf, sizeof(buf), f)) {
         buf[strcspn(buf, "\n")] = 0;
         print("Resolution:", buf);
@@ -267,16 +256,49 @@ void get_resolution() {
     }
 }
 
+void get_storage() {
+    FILE *df = popen("df -B1 / | tail -1", "r");
+    char line[256], out[64];
+    unsigned long long total, used;
+    int percent;
+    if (df && fgets(line, sizeof(line), df)) {
+        if (sscanf(line, "%*s %llu %llu", &total, &used) == 2) {
+            double total_gib = total / (1024.0 * 1024.0 * 1024.0);
+            double used_gib = used / (1024.0 * 1024.0 * 1024.0);
+            percent = (int)((used_gib / total_gib) * 100.0);
+            sprintf(out, "%.2f GiB / %.2f GiB (%d%%)", used_gib, total_gib, percent);
+            print("Disk:", out);
+        }
+        pclose(df);
+    }
+    {
+        FILE *mem = fopen("/proc/meminfo", "r");
+        char buf[128];
+        long swap_total = 0, swap_free = 0;
+        while (mem && fgets(buf, sizeof(buf), mem)) {
+            if (sscanf(buf, "SwapTotal: %ld kB", &swap_total) == 1) continue;
+            if (sscanf(buf, "SwapFree:  %ld kB", &swap_free) == 1) break;
+        }
+        if (mem)
+            fclose(mem);
+        if (swap_total > 0) {
+            int percent_swap;
+            long used_swap = swap_total - swap_free;
+            percent_swap = (int)((used_swap * 100.0) / swap_total);
+            sprintf(out, "%ld MiB / %ld MiB (%d%%)", used_swap / 1024, swap_total / 1024, percent_swap);
+            print("Swap:", out);
+        }
+    }
+}
+
 void get_de() {
-    char *de;
-    de = getenv("XDG_CURRENT_DESKTOP");
+    char *de = getenv("XDG_CURRENT_DESKTOP");
     print("DE:", de);
 }
 
 void get_wm() {
     FILE *f;
     char buf[64];
-    
     f = popen("wmctrl -m 2>/dev/null | grep Name | cut -d: -f2", "r");
     if (f && fgets(buf, sizeof(buf), f)) {
         buf[strcspn(buf, "\n")] = 0;
@@ -288,7 +310,6 @@ void get_wm() {
 void get_terminal() {
     FILE *f;
     char buf[64];
-    
     f = popen("ps -o comm= -p $(ps -o ppid= -p $(ps -o ppid= -p $$))", "r");
     if (f && fgets(buf, sizeof(buf), f)) {
         buf[strcspn(buf, "\n")] = 0;
@@ -365,5 +386,6 @@ int main() {
     get_cpu();
     get_gpu();
     get_memory();
+    get_storage();
     return 0;
 }
