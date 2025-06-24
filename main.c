@@ -225,8 +225,10 @@ void get_memory() {
     char memStr[64];
     double used, total_mib;
     int percent;
+
     if (!f)
         return;
+
     while (fscanf(f, "%31s %ld %c", label, &val, &discard) == 3) {
         if (strcmp(label, "MemTotal:") == 0)
             total = val;
@@ -234,9 +236,11 @@ void get_memory() {
             avail = val;
         if (total != -1 && avail != -1)
             break;
-        fgets(label, sizeof(label), f);
+        (void)fgets(label, sizeof(label), f);
     }
+
     fclose(f);
+
     if (total > 0 && avail >= 0) {
         used = (double)(total - avail) / 1024.0;
         total_mib = (double)total / 1024.0;
