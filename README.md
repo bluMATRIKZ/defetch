@@ -15,6 +15,7 @@ CPU:            Intel(R) Core(TM) i5-2400 CPU @ 3.10GHz
 GPU:            Intel Corporation 2nd Generation Core Processor Family Integrated Graphics Controller (rev 09)
 Memory:         2924 MiB / 7822 MiB
 ```
+UPCOMING!: Add Storage, and fix the placement of Memory
 
 Compile & install:
 ```
