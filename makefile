@@ -6,7 +6,6 @@ old: old-compile install
 	
 compile:
 	gcc -O3 -march=native -s main.c -o defetch
-	strip defetch
 
 old-compile:
 	gcc main.c -o defetch
