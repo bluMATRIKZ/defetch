@@ -229,15 +229,16 @@ void get_memory() {
     if (!f)
         return;
 
-    while (fscanf(f, "%31s %ld %c", label, &val, &discard) == 3) {
-        if (strcmp(label, "MemTotal:") == 0)
-            total = val;
-        else if (strcmp(label, "MemAvailable:") == 0)
-            avail = val;
-        if (total != -1 && avail != -1)
-            break;
-        (void)fgets(label, sizeof(label), f);
-    }
+  while (fscanf(f, "%31s %ld %c", label, &val, &discard) == 3) {
+    if (strcmp(label, "MemTotal:") == 0)
+        total = val;
+    else if (strcmp(label, "MemAvailable:") == 0)
+        avail = val;
+    if (total != -1 && avail != -1)
+        break;
+    char skip[256];
+    if (!fgets(skip, sizeof(skip), f)) break;
+}
 
     fclose(f);
 
