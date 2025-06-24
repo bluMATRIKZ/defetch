@@ -18,6 +18,7 @@ Memory:         5539 MiB / 7822 MiB (70%)
 Disk:           101.81 GiB / 915.81 GiB (11%)
 Swap:           71 MiB / 511 MiB (13%)
 ```
+TODO: Core and thread meter thingy
 
 Compile & install:
 ```
