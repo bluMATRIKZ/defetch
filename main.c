@@ -244,7 +244,7 @@ void get_memory() {
             avail = val;
         if (total != -1 && avail != -1)
             break;
-        fgets(label, sizeof(label), f);  /* skip rest of line */
+        fgets(label, sizeof(label), f);
     }
     fclose(f);
     if (total != -1 && avail != -1) {
