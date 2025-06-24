@@ -1,6 +1,6 @@
 # defetch
 
-defetch (pronouced duh-fetch) is a neofetch clone that is super light, should compile for old cpus and distros, and is portable
+defetch (pronouced deh-fetch) is a neofetch clone that is super light, should compile for old cpus and distros, and is portable
 
 ```
 OS:             Ubuntu 24.04.2 LTS
