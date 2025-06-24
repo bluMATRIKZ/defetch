@@ -7,10 +7,17 @@
 #ifndef HAVE_STRDUP
 char *my_strdup(const char *s)
 {
-    size_t n = strlen(s) + 1;
-    char *p = (char *)malloc(n);
-    if (p)
+    size_t n;
+    char *p;
+
+    if (!s) {
+        return NULL;
+    }
+    n = strlen(s) + 1;
+    p = (char *)malloc(n);
+    if (p) {
         memcpy(p, s, n);
+    }
     return p;
 }
 #define strdup(s) my_strdup(s)
@@ -18,55 +25,88 @@ char *my_strdup(const char *s)
 
 int command_exists(const char *cmd) {
     char *env_path;
-    char *path;
+    char *path_copy;
     char *dir;
     char fullpath[512];
     int found = 0;
+
     env_path = getenv("PATH");
-    if (!env_path)
+    if (!env_path) {
         return 0;
-    path = strdup(env_path);
-    if (!path)
+    }
+
+    path_copy = strdup(env_path);
+    if (!path_copy) {
         return 0;
-    dir = strtok(path, ":");
+    }
+
+    dir = strtok(path_copy, ":");
     while (dir != NULL) {
-        sprintf(fullpath, "%s/%s", dir, cmd);
+        if (snprintf(fullpath, sizeof(fullpath), "%s/%s", dir, cmd) < 0) {
+            dir = strtok(NULL, ":");
+            continue;
+        }
+
         if (access(fullpath, X_OK) == 0) {
             found = 1;
             break;
         }
         dir = strtok(NULL, ":");
     }
-    free(path);
+
+    free(path_copy);
     return found;
 }
 
 void print(const char *label, const char *value) {
-    if (value && *value)
+    if (value && *value) {
         printf("%-15s %s\n", label, value);
+    }
 }
 
 void get_line_val(const char *path, const char *key, char *out, size_t len) {
     FILE *f;
     char line[256];
-    char *val;
+    char *val_start;
+    char *val_end;
+    size_t key_len = strlen(key);
+    size_t copy_len;
+
+    *out = '\0';
+
     f = fopen(path, "r");
-    if (!f)
+    if (!f) {
         return;
+    }
+
     while (fgets(line, sizeof(line), f)) {
-        if (strncmp(line, key, strlen(key)) == 0) {
-            val = strchr(line, '=');
-            if (val) {
-                val++;
-                val[strcspn(val, "\n")] = 0;
-                if (*val == '"')
-                    val++;
-                if (strlen(val) > 0 && val[strlen(val)-1] == '"')
-                    val[strlen(val)-1] = 0;
-                strncpy(out, val, len - 1);
-                out[len - 1] = 0;
-                break;
+        if (strncmp(line, key, key_len) == 0 && line[key_len] == '=') {
+            val_start = &line[key_len + 1];
+
+            while (*val_start == ' ' || *val_start == '\t') {
+                val_start++;
             }
+
+            if (*val_start == '"') {
+                val_start++;
+            }
+
+            val_end = val_start;
+            while (*val_end != '\0' && *val_end != '\n' && *val_end != '\r') {
+                val_end++;
+            }
+            if (val_end > val_start && *(val_end - 1) == '"') {
+                val_end--;
+            }
+
+            copy_len = val_end - val_start;
+            if (copy_len >= len) {
+                copy_len = len - 1;
+            }
+
+            strncpy(out, val_start, copy_len);
+            out[copy_len] = '\0';
+            break;
         }
     }
     fclose(f);
@@ -81,10 +121,13 @@ void get_os() {
 void get_host() {
     FILE *f;
     char buf[128];
+
     f = fopen("/sys/class/dmi/id/product_name", "r");
-    if (f && fgets(buf, sizeof(buf), f)) {
-        buf[strcspn(buf, "\n")] = 0;
-        print("Host:", buf);
+    if (f) {
+        if (fgets(buf, sizeof(buf), f)) {
+            buf[strcspn(buf, "\n")] = '\0';
+            print("Host:", buf);
+        }
         fclose(f);
     }
 }
@@ -92,10 +135,13 @@ void get_host() {
 void get_kernel() {
     FILE *f;
     char buf[128];
+
     f = fopen("/proc/sys/kernel/osrelease", "r");
-    if (f && fgets(buf, sizeof(buf), f)) {
-        buf[strcspn(buf, "\n")] = 0;
-        print("Kernel:", buf);
+    if (f) {
+        if (fgets(buf, sizeof(buf), f)) {
+            buf[strcspn(buf, "\n")] = '\0';
+            print("Kernel:", buf);
+        }
         fclose(f);
     }
 }
@@ -106,11 +152,13 @@ void get_uptime() {
     long seconds;
     int years, months, days, hours, minutes;
     char out[256];
-    int first = 1;
+    int first_component = 1;
+
     f = fopen("/proc/uptime", "r");
     if (f) {
         if (fscanf(f, "%lf", &uptime_seconds) == 1) {
-            seconds = (long) uptime_seconds;
+            seconds = (long)uptime_seconds;
+
             years   = seconds / 31536000;
             seconds %= 31536000;
             months  = seconds / 2592000;
@@ -120,36 +168,43 @@ void get_uptime() {
             hours   = seconds / 3600;
             seconds %= 3600;
             minutes = seconds / 60;
+
             out[0] = '\0';
+
             if (years > 0) {
                 sprintf(out + strlen(out), "%d year%s", years, years == 1 ? "" : "s");
-                first = 0;
+                first_component = 0;
             }
             if (months > 0) {
-                if (!first)
+                if (!first_component) {
                     strcat(out, ", ");
+                }
                 sprintf(out + strlen(out), "%d month%s", months, months == 1 ? "" : "s");
-                first = 0;
+                first_component = 0;
             }
             if (days > 0) {
-                if (!first)
+                if (!first_component) {
                     strcat(out, ", ");
+                }
                 sprintf(out + strlen(out), "%d day%s", days, days == 1 ? "" : "s");
-                first = 0;
+                first_component = 0;
             }
             if (hours > 0) {
-                if (!first)
+                if (!first_component) {
                     strcat(out, ", ");
+                }
                 sprintf(out + strlen(out), "%d hour%s", hours, hours == 1 ? "" : "s");
-                first = 0;
+                first_component = 0;
             }
             if (minutes > 0) {
-                if (!first)
+                if (!first_component) {
                     strcat(out, ", ");
+                }
                 sprintf(out + strlen(out), "%d min%s", minutes, minutes == 1 ? "" : "s");
-                first = 0;
+                first_component = 0;
             }
-            if (first) {
+
+            if (first_component) {
                 sprintf(out, "0 min");
             }
             print("Uptime:", out);
@@ -160,24 +215,49 @@ void get_uptime() {
 
 void get_shell() {
     char *shell = getenv("SHELL");
-    if (!shell)
-        return;
-    const char *base = strrchr(shell, '/');
-    base = base ? base + 1 : shell;
-    char cmd[128], version[128], out[256];
+    const char *base;
+    char cmd[128];
+    char version[128];
+    char out[256];
     FILE *f;
-    sprintf(cmd, "%s --version 2>/dev/null", shell);
+    char *v_ptr;
+
+    if (!shell) {
+        return;
+    }
+
+    base = strrchr(shell, '/');
+    base = base ? base + 1 : shell;
+
+    if (snprintf(cmd, sizeof(cmd), "%s --version 2>/dev/null", shell) < 0) {
+        print("Shell:", base);
+        return;
+    }
+
     f = popen(cmd, "r");
-    if (f && fgets(version, sizeof(version), f)) {
-        version[strcspn(version, "\n")] = 0;
-        char *v = strstr(version, base);
-        if (v)
-            v += strlen(base);
-        else
-            v = version;
-        while (*v == ' ' || *v == ',' || *v == '-') v++;
-        sprintf(out, "%s %s", base, v);
-        print("Shell:", out);
+    if (f) {
+        if (fgets(version, sizeof(version), f)) {
+            version[strcspn(version, "\n")] = '\0';
+
+            v_ptr = strstr(version, base);
+            if (v_ptr) {
+                v_ptr += strlen(base);
+            } else {
+                v_ptr = version;
+            }
+
+            while (*v_ptr == ' ' || *v_ptr == ',' || *v_ptr == '-') {
+                v_ptr++;
+            }
+
+            if (snprintf(out, sizeof(out), "%s %s", base, v_ptr) >= 0) {
+                print("Shell:", out);
+            } else {
+                print("Shell:", base);
+            }
+        } else {
+            print("Shell:", base);
+        }
         pclose(f);
     } else {
         print("Shell:", base);
@@ -187,17 +267,20 @@ void get_shell() {
 void get_cpu() {
     FILE *f;
     char line[256];
-    char *v;
+    char *value_start;
+
     f = fopen("/proc/cpuinfo", "r");
-    if (!f)
+    if (!f) {
         return;
+    }
+
     while (fgets(line, sizeof(line), f)) {
         if (strncmp(line, "model name", 10) == 0) {
-            v = strchr(line, ':');
-            if (v) {
-                v += 2;
-                v[strcspn(v, "\n")] = 0;
-                print("CPU:", v);
+            value_start = strchr(line, ':');
+            if (value_start) {
+                value_start += 2;
+                value_start[strcspn(value_start, "\n")] = '\0';
+                print("CPU:", value_start);
             }
             break;
         }
@@ -208,10 +291,15 @@ void get_cpu() {
 void get_gpu() {
     FILE *f;
     char buf[256];
+
     f = popen("lspci 2>/dev/null | grep -i 'vga' | sed 's/.*: //'", "r");
-    if (f && fgets(buf, sizeof(buf), f)) {
-        buf[strcspn(buf, "\n")] = 0;
-        print("GPU:", buf);
+    if (f) {
+        if (fgets(buf, sizeof(buf), f)) {
+            buf[strcspn(buf, "\n")] = '\0';
+            print("GPU:", buf);
+        } else {
+            print("GPU:", "n/a");
+        }
         pclose(f);
     } else {
         print("GPU:", "n/a");
@@ -220,78 +308,99 @@ void get_gpu() {
 
 void get_memory() {
     FILE *f = fopen("/proc/meminfo", "r");
-    char label[32], discard;
-    long val, total = -1, avail = -1;
-    char memStr[64];
-    double used, total_mib;
-    int percent;
+    char label[32], discard_char;
+    long value_kb;
+    long total_kb = -1, avail_kb = -1;
+    char mem_str[64];
+    double used_mib, total_mib;
+    int percent_used;
 
-    if (!f)
+    if (!f) {
         return;
+    }
 
-  while (fscanf(f, "%31s %ld %c", label, &val, &discard) == 3) {
-    if (strcmp(label, "MemTotal:") == 0)
-        total = val;
-    else if (strcmp(label, "MemAvailable:") == 0)
-        avail = val;
-    if (total != -1 && avail != -1)
-        break;
-    char skip[256];
-    if (!fgets(skip, sizeof(skip), f)) break;
-}
+    while (fscanf(f, "%31s %ld %c", label, &value_kb, &discard_char) == 3) {
+        if (strcmp(label, "MemTotal:") == 0) {
+            total_kb = value_kb;
+        } else if (strcmp(label, "MemAvailable:") == 0) {
+            avail_kb = value_kb;
+        }
+        if (total_kb != -1 && avail_kb != -1) {
+            break;
+        }
+        while (fgetc(f) != '\n' && !feof(f));
+    }
 
     fclose(f);
 
-    if (total > 0 && avail >= 0) {
-        used = (double)(total - avail) / 1024.0;
-        total_mib = (double)total / 1024.0;
-        percent = (int)((used * 100.0) / total_mib);
-        sprintf(memStr, "%.0f MiB / %.0f MiB (%d%%)", used, total_mib, percent);
-        print("Memory:", memStr);
+    if (total_kb > 0 && avail_kb >= 0) {
+        used_mib = (double)(total_kb - avail_kb) / 1024.0;
+        total_mib = (double)total_kb / 1024.0;
+        percent_used = (int)((used_mib * 100.0) / total_mib);
+        if (snprintf(mem_str, sizeof(mem_str), "%.0f MiB / %.0f MiB (%d%%)", used_mib, total_mib, percent_used) >= 0) {
+            print("Memory:", mem_str);
+        }
     }
 }
 
 void get_resolution() {
     FILE *f = popen("xrandr 2>/dev/null | grep '*' | awk '{print $1}'", "r");
     char buf[32];
-    if (f && fgets(buf, sizeof(buf), f)) {
-        buf[strcspn(buf, "\n")] = 0;
-        print("Resolution:", buf);
+
+    if (f) {
+        if (fgets(buf, sizeof(buf), f)) {
+            buf[strcspn(buf, "\n")] = '\0';
+            print("Resolution:", buf);
+        }
         pclose(f);
     }
 }
 
 void get_storage() {
-    FILE *df = popen("df -B1 / | tail -1", "r");
-    char line[256], out[64];
-    unsigned long long total, used;
-    int percent;
-    if (df && fgets(line, sizeof(line), df)) {
-        if (sscanf(line, "%*s %llu %llu", &total, &used) == 2) {
-            double total_gib = total / (1024.0 * 1024.0 * 1024.0);
-            double used_gib = used / (1024.0 * 1024.0 * 1024.0);
-            percent = (int)((used_gib / total_gib) * 100.0);
-            sprintf(out, "%.2f GiB / %.2f GiB (%d%%)", used_gib, total_gib, percent);
-            print("Disk:", out);
+    FILE *df_pipe = popen("df -B1 / | tail -1", "r");
+    char line[256];
+    char out[64];
+    unsigned long long total_bytes, used_bytes;
+    int percent_disk;
+
+    if (df_pipe) {
+        if (fgets(line, sizeof(line), df_pipe)) {
+            if (sscanf(line, "%*s %llu %llu", &total_bytes, &used_bytes) == 2) {
+                double total_gib = total_bytes / (1024.0 * 1024.0 * 1024.0);
+                double used_gib = used_bytes / (1024.0 * 1024.0 * 1024.0);
+                percent_disk = (int)((used_gib / total_gib) * 100.0);
+                if (snprintf(out, sizeof(out), "%.2f GiB / %.2f GiB (%d%%)", used_gib, total_gib, percent_disk) >= 0) {
+                    print("Disk:", out);
+                }
+            }
         }
-        pclose(df);
+        pclose(df_pipe);
     }
+
     {
-        FILE *mem = fopen("/proc/meminfo", "r");
-        char buf[128];
-        long swap_total = 0, swap_free = 0;
-        while (mem && fgets(buf, sizeof(buf), mem)) {
-            if (sscanf(buf, "SwapTotal: %ld kB", &swap_total) == 1) continue;
-            if (sscanf(buf, "SwapFree:  %ld kB", &swap_free) == 1) break;
+        FILE *mem_file = fopen("/proc/meminfo", "r");
+        char buf_mem[128];
+        long swap_total_kb = 0, swap_free_kb = 0;
+        int percent_swap;
+        long used_swap_kb;
+
+        if (mem_file) {
+            while (fgets(buf_mem, sizeof(buf_mem), mem_file)) {
+                if (sscanf(buf_mem, "SwapTotal: %ld kB", &swap_total_kb) == 1) {
+                } else if (sscanf(buf_mem, "SwapFree: %ld kB", &swap_free_kb) == 1) {
+                    break;
+                }
+            }
+            fclose(mem_file);
         }
-        if (mem)
-            fclose(mem);
-        if (swap_total > 0) {
-            int percent_swap;
-            long used_swap = swap_total - swap_free;
-            percent_swap = (int)((used_swap * 100.0) / swap_total);
-            sprintf(out, "%ld MiB / %ld MiB (%d%%)", used_swap / 1024, swap_total / 1024, percent_swap);
-            print("Swap:", out);
+
+        if (swap_total_kb > 0) {
+            used_swap_kb = swap_total_kb - swap_free_kb;
+            percent_swap = (int)(((double)used_swap_kb * 100.0) / swap_total_kb);
+            if (snprintf(out, sizeof(out), "%ld MiB / %ld MiB (%d%%)",
+                         used_swap_kb / 1024, swap_total_kb / 1024, percent_swap) >= 0) {
+                print("Swap:", out);
+            }
         }
     }
 }
@@ -304,10 +413,17 @@ void get_de() {
 void get_wm() {
     FILE *f;
     char buf[64];
+
     f = popen("wmctrl -m 2>/dev/null | grep Name | cut -d: -f2", "r");
-    if (f && fgets(buf, sizeof(buf), f)) {
-        buf[strcspn(buf, "\n")] = 0;
-        print("WM:", buf);
+    if (f) {
+        if (fgets(buf, sizeof(buf), f)) {
+            char *trimmed_buf = buf;
+            while (*trimmed_buf == ' ') {
+                trimmed_buf++;
+            }
+            trimmed_buf[strcspn(trimmed_buf, "\n")] = '\0';
+            print("WM:", trimmed_buf);
+        }
         pclose(f);
     }
 }
@@ -315,10 +431,13 @@ void get_wm() {
 void get_terminal() {
     FILE *f;
     char buf[64];
+
     f = popen("ps -o comm= -p $(ps -o ppid= -p $(ps -o ppid= -p $$))", "r");
-    if (f && fgets(buf, sizeof(buf), f)) {
-        buf[strcspn(buf, "\n")] = 0;
-        print("Terminal:", buf);
+    if (f) {
+        if (fgets(buf, sizeof(buf), f)) {
+            buf[strcspn(buf, "\n")] = '\0';
+            print("Terminal:", buf);
+        }
         pclose(f);
     }
 }
@@ -326,7 +445,7 @@ void get_terminal() {
 void get_packages() {
     struct pkg {
         const char *cmd;
-        const char *count;
+        const char *count_cmd;
         const char *label;
         int adjust;
     } pkgs[] = {
@@ -344,37 +463,42 @@ void get_packages() {
         {"guix",       "guix package -I | wc -l",              "guix",    0},
         {"nix-store",  "nix-store --gc --print-roots | wc -l", "nix",     0}
     };
-    char pkgStr[256];
+
+    char pkg_str[256];
     char buf[64];
-    char cmdcheck[128];
-    int found = 0;
+    FILE *f_pipe;
+    int found_any_pm = 0;
     int i;
-    FILE *f;
-    
-    pkgStr[0] = '\0';
+    int num_pkgs;
+
+    pkg_str[0] = '\0';
+
     for (i = 0; i < (int)(sizeof(pkgs) / sizeof(pkgs[0])); i++) {
-        sprintf(cmdcheck, "command -v %s > /dev/null 2>&1", pkgs[i].cmd);
-        if (!system(cmdcheck)) {
-            f = popen(pkgs[i].count, "r");
-            if (f && fgets(buf, sizeof(buf), f)) {
-                int n = atoi(buf) - pkgs[i].adjust;
-                if (n > 0) {
-                    if (found)
-                        strcat(pkgStr, ", ");
-                    {
+        if (command_exists(pkgs[i].cmd)) {
+            f_pipe = popen(pkgs[i].count_cmd, "r");
+            if (f_pipe) {
+                if (fgets(buf, sizeof(buf), f_pipe)) {
+                    num_pkgs = atoi(buf) - pkgs[i].adjust;
+                    if (num_pkgs > 0) {
+                        if (found_any_pm) {
+                            strcat(pkg_str, ", ");
+                        }
                         char tmp[64];
-                        sprintf(tmp, "%d (%s)", n, pkgs[i].label);
-                        strcat(pkgStr, tmp);
+                        if (snprintf(tmp, sizeof(tmp), "%d (%s)", num_pkgs, pkgs[i].label) >= 0) {
+                            strcat(pkg_str, tmp);
+                        }
+                        found_any_pm++;
                     }
-                    found++;
                 }
-                pclose(f);
+                pclose(f_pipe);
             }
         }
     }
-    if (!found)
-        strcpy(pkgStr, "none");
-    print("Packages:", pkgStr);
+
+    if (!found_any_pm) {
+        strcpy(pkg_str, "none");
+    }
+    print("Packages:", pkg_str);
 }
 
 int main() {
@@ -392,5 +516,6 @@ int main() {
     get_gpu();
     get_memory();
     get_storage();
+
     return 0;
 }
