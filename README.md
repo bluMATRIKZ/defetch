@@ -12,13 +12,12 @@ Packages:       2599 (dpkg), 19 (flatpak)
 Resolution:     1440x900
 DE:             LXQt
 Terminal:       bash
-CPU:            Intel(R) Core(TM) i5-2400 CPU @ 3.10GHz
+CPU:            Intel(R) Core(TM) i5-2400 CPU @ 3.10GHz (4C) (4T)
 GPU:            Intel Corporation 2nd Generation Core Processor Family Integrated Graphics Controller (rev 09)
 Memory:         5539 MiB / 7822 MiB (70%)
 Disk:           101.81 GiB / 915.81 GiB (11%)
 Swap:           71 MiB / 511 MiB (13%)
 ```
-TODO: Core and thread meter thingy
 
 Compile & install:
 ```
