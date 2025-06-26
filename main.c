@@ -266,7 +266,7 @@ void get_shell() {
     }
 }
 
-void get_cpu_info() {
+void get_cpu() {
     FILE *f = fopen("/proc/cpuinfo", "r");
     if (!f) return;
 
