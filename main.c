@@ -64,6 +64,8 @@ void print(const char *label, const char *value) {
     }
 }
 
+void get_cpu(void); 
+
 void get_line_val(const char *path, const char *key, char *out, size_t len) {
     FILE *f;
     char line[256];
