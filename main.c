@@ -64,7 +64,51 @@ void print(const char *label, const char *value) {
     }
 }
 
-void get_cpu(void); 
+void get_cpu(void) {
+    FILE *f = fopen("/proc/cpuinfo", "r");
+    if (!f) return;
+
+    char line[256];
+    char *model_name = NULL;
+    int core_ids[256][256] = {{0}};
+    int total_threads = 0;
+    int physical_count = 0;
+
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "model name", 10) == 0 && !model_name) {
+            char *start = strchr(line, ':');
+            if (start) {
+                start += 2;
+                model_name = strdup(start);
+                model_name[strcspn(model_name, "\n")] = '\0';
+            }
+        }
+
+        static int current_phys_id = -1;
+        static int current_core_id = -1;
+
+        if (strncmp(line, "physical id", 11) == 0) {
+            sscanf(line, "physical id\t: %d", &current_phys_id);
+        } else if (strncmp(line, "core id", 7) == 0) {
+            sscanf(line, "core id\t: %d", &current_core_id);
+            if (current_phys_id != -1 && current_core_id != -1 && !core_ids[current_phys_id][current_core_id]) {
+                core_ids[current_phys_id][current_core_id] = 1;
+                physical_count++;
+            }
+        } else if (strncmp(line, "processor", 9) == 0) {
+            total_threads++;
+        }
+    }
+    fclose(f);
+
+    if (model_name) {
+        char cpu_str[256];
+        if (snprintf(cpu_str, sizeof(cpu_str), "%s (%dC) (%dT)", model_name, physical_count, total_threads) >= 0) {
+            print("CPU:", cpu_str);
+        }
+        free(model_name);
+    }
+}
 
 void get_line_val(const char *path, const char *key, char *out, size_t len) {
     FILE *f;
@@ -161,13 +205,13 @@ void get_uptime() {
         if (fscanf(f, "%lf", &uptime_seconds) == 1) {
             seconds = (long)uptime_seconds;
 
-            years   = seconds / 31536000;
+            years = seconds / 31536000;
             seconds %= 31536000;
-            months  = seconds / 2592000;
+            months = seconds / 2592000;
             seconds %= 2592000;
-            days    = seconds / 86400;
+            days = seconds / 86400;
             seconds %= 86400;
-            hours   = seconds / 3600;
+            hours = seconds / 3600;
             seconds %= 3600;
             minutes = seconds / 60;
 
@@ -263,50 +307,6 @@ void get_shell() {
         pclose(f);
     } else {
         print("Shell:", base);
-    }
-}
-
-void get_cpu() {
-    FILE *f = fopen("/proc/cpuinfo", "r");
-    if (!f) return;
-
-    char line[256];
-    char *model_name = NULL;
-    int physical_ids[256] = {0};
-    int core_ids[256][256] = {{0}};
-    int total_threads = 0;
-    int physical_count = 0;
-
-    while (fgets(line, sizeof(line), f)) {
-        if (strncmp(line, "model name", 10) == 0 && !model_name) {
-            char *start = strchr(line, ':');
-            if (start) {
-                start += 2;
-                model_name = strdup(start);
-                model_name[strcspn(model_name, "\n")] = '\0';
-            }
-        }
-
-        static int current_phys_id = -1;
-        static int current_core_id = -1;
-
-        if (strncmp(line, "physical id", 11) == 0) {
-            sscanf(line, "physical id\t: %d", &current_phys_id);
-        } else if (strncmp(line, "core id", 7) == 0) {
-            sscanf(line, "core id\t: %d", &current_core_id);
-            if (!core_ids[current_phys_id][current_core_id]) {
-                core_ids[current_phys_id][current_core_id] = 1;
-                physical_count++;
-            }
-        } else if (strncmp(line, "processor", 9) == 0) {
-            total_threads++;
-        }
-    }
-    fclose(f);
-
-    if (model_name) {
-        printf("%s (%dC) (%dT)\n", model_name, physical_count, total_threads);
-        free(model_name);
     }
 }
 
@@ -471,19 +471,19 @@ void get_packages() {
         const char *label;
         int adjust;
     } pkgs[] = {
-        {"dpkg",       "dpkg -l | wc -l",                      "dpkg",    0},
-        {"rpm",        "rpm -qa | wc -l",                      "rpm",     0},
-        {"pacman",     "pacman -Q | wc -l",                    "pacman",  0},
-        {"apk",        "apk info | wc -l",                     "apk",     0},
-        {"xbps-query", "xbps-query -l | wc -l",                "xbps",    0},
-        {"flatpak",    "flatpak list | wc -l",                 "flatpak", 0},
-        {"snap",       "snap list | wc -l",                    "snap",    1},
-        {"zypper",     "zypper se -i | wc -l",                 "zypper",  0},
-        {"dnf",        "dnf list installed | wc -l",           "dnf",     0},
-        {"yum",        "yum list installed | wc -l",           "yum",     0},
-        {"qlist",      "qlist -I | wc -l",                     "emerge",  0},
-        {"guix",       "guix package -I | wc -l",              "guix",    0},
-        {"nix-store",  "nix-store --gc --print-roots | wc -l", "nix",     0}
+        {"dpkg",         "dpkg -l | wc -l",                      "dpkg",    0},
+        {"rpm",          "rpm -qa | wc -l",                      "rpm",     0},
+        {"pacman",       "pacman -Q | wc -l",                    "pacman",  0},
+        {"apk",          "apk info | wc -l",                     "apk",     0},
+        {"xbps-query",   "xbps-query -l | wc -l",                "xbps",    0},
+        {"flatpak",      "flatpak list | wc -l",                 "flatpak", 0},
+        {"snap",         "snap list | wc -l",                    "snap",    1},
+        {"zypper",       "zypper se -i | wc -l",                 "zypper",  0},
+        {"dnf",          "dnf list installed | wc -l",           "dnf",     0},
+        {"yum",          "yum list installed | wc -l",           "yum",     0},
+        {"qlist",        "qlist -I | wc -l",                     "emerge",  0},
+        {"guix",         "guix package -I | wc -l",              "guix",    0},
+        {"nix-store",    "nix-store --gc --print-roots | wc -l", "nix",     0}
     };
 
     char pkg_str[256];
