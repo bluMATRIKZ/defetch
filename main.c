@@ -264,28 +264,48 @@ void get_shell() {
     }
 }
 
-void get_cpu() {
-    FILE *f;
-    char line[256];
-    char *value_start;
+void get_cpu_info() {
+    FILE *f = fopen("/proc/cpuinfo", "r");
+    if (!f) return;
 
-    f = fopen("/proc/cpuinfo", "r");
-    if (!f) {
-        return;
-    }
+    char line[256];
+    char *model_name = NULL;
+    int physical_ids[256] = {0};
+    int core_ids[256][256] = {{0}};
+    int total_threads = 0;
+    int physical_count = 0;
 
     while (fgets(line, sizeof(line), f)) {
-        if (strncmp(line, "model name", 10) == 0) {
-            value_start = strchr(line, ':');
-            if (value_start) {
-                value_start += 2;
-                value_start[strcspn(value_start, "\n")] = '\0';
-                print("CPU:", value_start);
+        if (strncmp(line, "model name", 10) == 0 && !model_name) {
+            char *start = strchr(line, ':');
+            if (start) {
+                start += 2;
+                model_name = strdup(start);
+                model_name[strcspn(model_name, "\n")] = '\0';
             }
-            break;
+        }
+
+        static int current_phys_id = -1;
+        static int current_core_id = -1;
+
+        if (strncmp(line, "physical id", 11) == 0) {
+            sscanf(line, "physical id\t: %d", &current_phys_id);
+        } else if (strncmp(line, "core id", 7) == 0) {
+            sscanf(line, "core id\t: %d", &current_core_id);
+            if (!core_ids[current_phys_id][current_core_id]) {
+                core_ids[current_phys_id][current_core_id] = 1;
+                physical_count++;
+            }
+        } else if (strncmp(line, "processor", 9) == 0) {
+            total_threads++;
         }
     }
     fclose(f);
+
+    if (model_name) {
+        printf("%s (%dC) (%dT)\n", model_name, physical_count, total_threads);
+        free(model_name);
+    }
 }
 
 void get_gpu() {
